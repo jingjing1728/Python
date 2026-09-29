@@ -1,0 +1,205 @@
+
+# -*- coding: utf-8 -*-
+"""
+argparse 模块常见用法笔记
+来源: https://blog.csdn.net/RudeTomatoes/article/details/117003291
+官方文档: https://docs.python.org/zh-cn/3/library/argparse.html
+
+argparse 是 Python 标准库里的命令行选项、参数和子命令解析器。
+适用场景: 代码里有需要频繁修改的参数（如深度学习的 lr、batch_size），
+把它们放到代码外部，运行时从命令行传入，不用每次改代码。
+
+贯穿全文的例子: 计算圆柱体体积  V = π * r² * h
+
+本文件可直接运行: python argparse_notes.py
+每个 demo 用 parser.parse_args([...]) 模拟命令行输入，方便对照结果。
+"""
+
+import argparse
+import math
+
+
+def cylinder_volume(radius, height):
+    """圆柱体体积公式"""
+    return math.pi * (radius ** 2) * height
+
+
+# =============================================================================
+# 0. 不用 argparse 的写法（痛点）
+# =============================================================================
+def demo0_without_argparse():
+    # 参数写死在代码里，想算别的圆柱体就得改代码
+    print(cylinder_volume(1, 3))
+
+
+# =============================================================================
+# 1. 最基本用法: 位置参数
+# =============================================================================
+def demo1_positional():
+    # 1) 创建 ArgumentParser 对象（装载参数的容器）
+    #    description 是描述信息，用 python xxx.py -h 可以看到
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+
+    # 2) 添加命令行参数，括号里依次是:
+    #    参数名; type=参数类型（默认是 str，要参与运算所以设为 int）; help=描述信息
+    parser.add_argument('radius', type=int, help='Radius of cylinder')
+    parser.add_argument('height', type=int, help='Height of cylinder')
+
+    # 3) parse_args() 解析命令行，得到所有参数
+    #    真实使用时写 args = parser.parse_args()，这里模拟: python test.py 1 3
+    args = parser.parse_args(['1', '3'])
+
+    # 4) 通过 args.参数名 取值
+    print(cylinder_volume(args.radius, args.height))
+
+    # 注意: 位置参数必须按顺序输入，1 是半径，3 是高度，顺序不能换
+
+
+# =============================================================================
+# 2. -h 查看帮助信息（argparse 自动生成）
+# =============================================================================
+def demo2_help():
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+    parser.add_argument('radius', type=int, help='Radius of cylinder')
+    parser.add_argument('height', type=int, help='Height of cylinder')
+    # 等价于命令行执行: python test.py -h
+    parser.print_help()
+
+
+# =============================================================================
+# 3. 可选参数（选择型参数）: 参数名前加 "--"，顺序随意、输入时带参数名
+# =============================================================================
+def demo3_optional():
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+
+    # 写法一: 只用长参数名 "--radius"
+    # parser.add_argument('--radius', type=int, help='Radius of cylinder')
+
+    # 写法二: 短别名 "-r" + 长参数名 "--radius"
+    #    注意: 有别名时，"--" 修饰的长参数名必须存在，args 里用的是长名 args.radius
+    parser.add_argument('-r', '--radius', type=int, help='Radius of cylinder')
+    parser.add_argument('-H', '--height', type=int, help='Height of cylinder')
+
+    # 以下几种输入都等价（顺序可换）:
+    #   python test.py --radius 1 --height 3
+    #   python test.py --height 3 --radius 1
+    #   python test.py -r 1 -H 3
+    args = parser.parse_args(['-H', '3', '-r', '1'])
+    print(cylinder_volume(args.radius, args.height))
+
+
+# =============================================================================
+# 4. metavar: 控制 -h 帮助信息里参数值的显示名
+# =============================================================================
+def demo4_metavar():
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+
+    # 默认 -h 里显示为: -r RADIUS, --radius RADIUS
+    # metavar=''     -> 显示为: -r , --radius       （去掉那串大写名，更简洁）
+    # metavar='半径'  -> 显示为: -r 半径, --radius 半径
+    parser.add_argument('-r', '--radius', type=int, metavar='', help='Radius of cylinder')
+    parser.add_argument('-H', '--height', type=int, metavar='HEIGHT_VALUE', help='Height of cylinder')
+    parser.print_help()
+
+
+# =============================================================================
+# 5. required: 可选参数默认可以不传（不传时值为 None），required=True 强制必须传
+# =============================================================================
+def demo5_required():
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+    parser.add_argument('-r', '--radius', type=int, metavar='', required=True, help='Radius of cylinder')
+    parser.add_argument('-H', '--height', type=int, metavar='', required=True, help='Height of cylinder')
+
+    args = parser.parse_args(['-r', '1', '-H', '3'])
+    print(cylinder_volume(args.radius, args.height))
+
+    # 如果只传 -r 1 不传 -H，会直接报错退出:
+    #   error: the following arguments are required: -H/--height
+    # 不加 required 的话则不报错，args.height 为 None，后续计算才出错
+
+    # 补充: 更常见的做法是给默认值，不传就用默认值
+    #   parser.add_argument('--lr', type=float, default=0.01)
+
+
+# =============================================================================
+# 6. dest: 自定义参数在 args 里的变量名
+# =============================================================================
+def demo6_dest():
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+    # 没有 "--xxx" 长名时，用 dest 指定变量名，代码里用 args.radius 取值
+    parser.add_argument('-r', dest='radius', type=int, help='Radius of cylinder')
+    parser.add_argument('-H', dest='height', type=int, help='Height of cylinder')
+
+    args = parser.parse_args(['-r', '1', '-H', '3'])
+    print(cylinder_volume(args.radius, args.height))
+
+
+# =============================================================================
+# 7. 互斥参数组 + action='store_true' 开关参数
+# =============================================================================
+def demo7_mutually_exclusive(argv):
+    parser = argparse.ArgumentParser(description='Calculate volume of a cylinder')
+    parser.add_argument('-r', '--radius', type=int, metavar='', required=True, help='Radius of cylinder')
+    parser.add_argument('-H', '--height', type=int, metavar='', required=True, help='Height of cylinder')
+
+    # 添加互斥组: 组内参数最多只能同时出现一个
+    group = parser.add_mutually_exclusive_group()
+
+    # action='store_true': 开关参数，后面不跟值
+    #   不写 -q 时 args.quiet 为 False；写了 -q 就变成 True
+    group.add_argument('-q', '--quiet', action='store_true', help='Print quiet')
+    group.add_argument('-v', '--verbose', action='store_true', help='Print verbose')
+
+    args = parser.parse_args(argv)
+    volume = cylinder_volume(args.radius, args.height)
+
+    if args.quiet:
+        print(volume)  # 安静模式: 只输出数字
+    elif args.verbose:
+        print('Volume of a Cylinder with radius %s and height %s is %s'
+              % (args.radius, args.height, volume))  # 详细模式
+    else:
+        print('Volume of Cylinder = %s' % volume)  # 默认模式
+
+    # 使用:
+    #   python test.py -r 2 -H 4        -> 默认输出
+    #   python test.py -r 2 -H 4 -v     -> 详细输出
+    #   python test.py -r 2 -H 4 -q     -> 只输出数字
+    #   python test.py -r 2 -H 4 -q -v  -> 报错: argument -v/--verbose: not allowed with argument -q/--quiet
+    # quiet 和 verbose 只能选一个，或者都不选走默认
+
+
+# =============================================================================
+# 小结: 标准四步
+#   1. import argparse
+#   2. parser = argparse.ArgumentParser(description='...')
+#   3. parser.add_argument(...)   常用属性:
+#        type      参数类型，默认 str
+#        help      帮助描述
+#        default   默认值
+#        required  是否必须传
+#        metavar   -h 中显示的参数值名称
+#        dest      args 中的变量名
+#        action    'store_true' / 'store_false' 做开关
+#        choices   限定取值范围，如 choices=['sgd', 'adam']
+#        nargs     接收多个值，如 nargs='+'
+#   4. args = parser.parse_args()，用 args.xxx 取值
+# =============================================================================
+
+
+if __name__ == '__main__':
+    demos = [
+        ('0. 不用 argparse', demo0_without_argparse),
+        ('1. 位置参数', demo1_positional),
+        ('2. -h 帮助信息', demo2_help),
+        ('3. 可选参数', demo3_optional),
+        ('4. metavar', demo4_metavar),
+        ('5. required', demo5_required),
+        ('6. dest', demo6_dest),
+        ('7a. 互斥组 默认', lambda: demo7_mutually_exclusive(['-r', '2', '-H', '4'])),
+        ('7b. 互斥组 -v', lambda: demo7_mutually_exclusive(['-r', '2', '-H', '4', '-v'])),
+        ('7c. 互斥组 -q', lambda: demo7_mutually_exclusive(['-r', '2', '-H', '4', '-q'])),
+    ]
+    for title, fn in demos:
+        print('=' * 20, title, '=' * 20)
+        fn()
